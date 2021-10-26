@@ -78,7 +78,7 @@ fun Greeting(name: String) {
         mutableStateOf(iconInitial)
     }
 
-    val iconLoad = 5.dp
+    val iconLoad = 15.dp
 
     val iconState = remember { mutableStateOf(false) }
 
@@ -101,6 +101,19 @@ fun Greeting(name: String) {
 //                iconState.value = false
             }
         }
+    )
+
+    val infiniteTransition = rememberInfiniteTransition()
+    val iconRotate = infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1000,
+                easing = LinearEasing
+            ),
+            repeatMode = RepeatMode.Restart
+        )
     )
 
 
@@ -171,10 +184,16 @@ fun Greeting(name: String) {
                         x = (maxWidth - iconSize) / 2,
                         y = iconPosY.value
                     )
+                    .background(Color.DarkGray, CircleShape)
                     .height(iconSize)
                     .width(iconSize)
-                    .rotate(abs(threshold.dp / iconPosY.value) * 360),
-                tint = Color.Blue
+                    .rotate(degrees = if(iconState.value) {
+                        iconRotate.value
+                    } else {
+                        abs(iconPosY.value / threshold.dp) * 720f
+
+                    }),
+                tint = Color.Cyan
 
             )
 //            Spacer(
