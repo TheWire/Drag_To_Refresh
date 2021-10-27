@@ -1,7 +1,5 @@
 package com.thewire.nested_scroll
 
-import android.annotation.SuppressLint
-import android.graphics.drawable.Icon
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -22,9 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -33,8 +29,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -67,6 +61,7 @@ fun doSimulatedRefresh(refreshState: MutableState<Boolean>) {
     }
 }
 
+//test composable with lazy column list
 @Composable
 fun ListWithRefresh() {
 
@@ -103,6 +98,9 @@ fun ListWithRefresh() {
     }
 }
 
+
+//handles nested scrolling
+//sets refreshState and calls refreshCallback when threshold scroll met
 @Composable
 fun refreshAction(
     threshold: Float,
@@ -130,9 +128,14 @@ fun refreshAction(
                 source: NestedScrollSource
             ): Offset {
 //                Log.d("SCROLL", "post scroll consumed: ${consumed.y} available: ${available.y}")
+                //if scrolling up and there is unconsumed scroll available i.e. we are scroll as
+                //much as possible
                 if (available.y > 0) {
+
                     iOffset.value += available.y
+                    //prevent icon moving bellow threshold point
                     if (iOffset.value < threshold) {
+                        //set icon position to available scroll
                         iconPos.value = available.y.dp
                     }
 
@@ -140,12 +143,16 @@ fun refreshAction(
                 return super.onPostScroll(consumed, available, source)
             }
 
+            //refresh only happens on fling i.e. when scroll is released
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
 //                Log.d("SCROLL", "post fling consumed: ${consumed.y} available: ${available.y}")
+
+                //if scrolling threshold met do refresh
                 if(iOffset.value >= threshold) {
                     refreshState.value = true
                     refreshCallback(refreshState)
                 }
+                //reset offset whether threshold was met or not
                 iOffset.value = 0f
                 return super.onPostFling(consumed, available)
             }
@@ -173,28 +180,35 @@ fun RefreshContainer(
     content: @Composable BoxWithConstraintsScope.() -> Unit
 ) {
 
+    //icon position set by scrolling
     val iconPos = remember {
         mutableStateOf(initialIconPosY)
     }
 
 
+    //icon position set by either scroll or animation
     val iconPosY = animateDpAsState(
         animationSpec = tween(
             durationMillis = 250,
             easing = LinearEasing
         ),
+        //if there is no fresh i.e. threshold not met then
+        //set icon position to scroll position
         targetValue = if(!refreshState.value) {
             iconPos.value
-        } else {
+        } else { //if threshold met set icon to loading pos
             iconLoadPos
         },
         finishedListener = {
+            //after refresh
+            //when done animating loading pos send icon back to its initial position
             if(refreshState.value) {
                 iconPos.value = initialIconPosY
             }
         }
     )
 
+    //icon rotation animation when at loading pos during refresh
     val infiniteTransition = rememberInfiniteTransition()
     val iconRotate = infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -208,6 +222,7 @@ fun RefreshContainer(
         )
     )
 
+    //box with constraints so we know width
     BoxWithConstraints(
         modifier = modifier
             .nestedScroll(
@@ -219,6 +234,7 @@ fun RefreshContainer(
                 )
             )
     ) {
+        //refresh indication icon
         Icon(
             imageVector= iconImage,
             contentDescription = "refresh",
@@ -231,9 +247,10 @@ fun RefreshContainer(
                 .height(iconSize)
                 .width(iconSize)
                 .rotate(
+                    //if refreshing set loading rotation animation
                     degrees = if (refreshState.value) {
                         iconRotate.value
-                    } else {
+                    } else { //if not refreshing position is based on scrolling
                         abs(iconPosY.value / threshold.dp) * 720f
 
                     }
