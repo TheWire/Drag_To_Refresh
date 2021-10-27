@@ -1,6 +1,7 @@
 package com.thewire.nested_scroll
 
 import android.annotation.SuppressLint
+import android.graphics.drawable.Icon
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -28,6 +29,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -48,57 +50,147 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             Nested_ScrollTheme {
-                // A surface container using the 'background' color from the theme
                 Surface(color = MaterialTheme.colors.background) {
-                    Greeting("Android")
+                    ListWithRefresh()
                 }
             }
         }
     }
 }
 
-fun refreshAction(r: MutableState<Boolean>) {
+//simulated refresh/reload
+fun doSimulatedRefresh(refreshState: MutableState<Boolean>) {
     CoroutineScope(Dispatchers.Main).launch {
-        r.value = true;
+        refreshState.value = true
         delay(2000)
-        r.value = false
+        refreshState.value = false
     }
 }
 
-
-@SuppressLint("UnusedTransitionTargetStateParameter")
 @Composable
-fun Greeting(name: String) {
+fun ListWithRefresh() {
 
-    val iconSize = 25.dp
-    val iconInitial = -iconSize
-    val threshold = 150f
+    val refreshState = remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .border(
+                width = if(refreshState.value) {
+                    5.dp
+                } else {
+                    0.dp
+                }, color = Color.Red
+            )
+    ) {
+
+        RefreshContainer(
+            modifier = Modifier.fillMaxSize(),
+            refreshState = refreshState,
+            refreshCallback = ::doSimulatedRefresh
+        ) {
+            //example list
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 10.dp
+                )
+            ) {
+                items(100) { index ->
+                    Text("I'm item $index")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun refreshAction(
+    threshold: Float,
+    iconPos: MutableState<Dp>,
+    refreshState: MutableState<Boolean>,
+    refreshCallback: (MutableState<Boolean>) -> Unit,
+) : NestedScrollConnection {
+
     val iOffset = remember { mutableStateOf(0f)}
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+//                Log.d("SCROLL", "pre scroll ${available.y}")
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+//                Log.d("SCROLL", "pre fling ${available.y}")
+                return super.onPreFling(available)
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+//                Log.d("SCROLL", "post scroll consumed: ${consumed.y} available: ${available.y}")
+                if (available.y > 0) {
+                    iOffset.value += available.y
+                    if (iOffset.value < threshold) {
+                        iconPos.value = available.y.dp
+                    }
+
+                }
+                return super.onPostScroll(consumed, available, source)
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+//                Log.d("SCROLL", "post fling consumed: ${consumed.y} available: ${available.y}")
+                if(iOffset.value >= threshold) {
+                    refreshState.value = true
+                    refreshCallback(refreshState)
+                }
+                iOffset.value = 0f
+                return super.onPostFling(consumed, available)
+            }
+
+        }
+    }
+    return nestedScrollConnection
+}
+
+
+
+@Composable
+fun RefreshContainer(
+    modifier: Modifier = Modifier,
+    refreshState: MutableState<Boolean>,
+    iconImage: ImageVector = Icons.Filled.Refresh,
+    iconBackgroundShape: Shape = CircleShape,
+    iconColor: Color = Color.Cyan,
+    iconBackgroundColor: Color = Color.DarkGray,
+    threshold: Float = 150f,
+    iconSize: Dp = 25.dp,
+    initialIconPosY: Dp = -iconSize,
+    iconLoadPos: Dp = 15.dp,
+    refreshCallback: (MutableState<Boolean>) -> Unit,
+    content: @Composable BoxWithConstraintsScope.() -> Unit
+) {
+
     val iconPos = remember {
-        mutableStateOf(iconInitial)
+        mutableStateOf(initialIconPosY)
     }
 
-    val iconLoad = 15.dp
 
-    val iconState = remember { mutableStateOf(false) }
-
-    val trans = updateTransition(targetState = iconState)
-    val transition = updateTransition(targetState = iconState, label = "derp")
-    //can actually do animate offset need to change stuff
     val iconPosY = animateDpAsState(
         animationSpec = tween(
             durationMillis = 250,
             easing = LinearEasing
         ),
-        targetValue = if(!iconState.value) {
+        targetValue = if(!refreshState.value) {
             iconPos.value
         } else {
-            iconLoad
+            iconLoadPos
         },
         finishedListener = {
-            if(iconState.value) {
-                iconPos.value = iconInitial
-//                iconState.value = false
+            if(refreshState.value) {
+                iconPos.value = initialIconPosY
             }
         }
     )
@@ -116,116 +208,39 @@ fun Greeting(name: String) {
         )
     )
 
-
-    val nestedScrollConnection = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                Log.d("SCROLL", "pre scroll")
-                return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-//                Log.d("SCROLL", "pre fling")
-                return super.onPreFling(available)
-            }
-
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource
-            ): Offset {
-//                Log.d("SCROLL", "post scroll")
-                if (available.y > 0) {
-                    iOffset.value += available.y
-                    if (iOffset.value < threshold) {
-                        iconPos.value = available.y.dp
-                    }
-
-                }
-                return super.onPostScroll(consumed, available, source)
-            }
-
-            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                Log.d("SCROLL", "post fling")
-                if(iOffset.value >= threshold) {
-                    refreshAction(iconState)
-                }
-                iOffset.value = 0f
-                return super.onPostFling(consumed, available)
-            }
-
-        }
-    }
-
-
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .nestedScroll(nestedScrollConnection)
-            .border(
-                width = if (iconState.value) {
-                    5.dp
-                } else {
-                    0.dp
-                }, color = Color.Red
+    BoxWithConstraints(
+        modifier = modifier
+            .nestedScroll(
+                refreshAction(
+                    threshold = threshold,
+                    iconPos = iconPos,
+                    refreshState = refreshState,
+                    refreshCallback = refreshCallback,
+                )
             )
     ) {
-        BoxWithConstraints(
+        Icon(
+            imageVector= iconImage,
+            contentDescription = "refresh",
             modifier = Modifier
-                .fillMaxSize()
-        ) {
-
-            Icon(
-                imageVector= Icons.Filled.Refresh,
-                contentDescription = "refresh",
-                modifier = Modifier
-                    .offset(
-                        x = (maxWidth - iconSize) / 2,
-                        y = iconPosY.value
-                    )
-                    .background(Color.DarkGray, CircleShape)
-                    .height(iconSize)
-                    .width(iconSize)
-                    .rotate(degrees = if(iconState.value) {
+                .offset(
+                    x = (maxWidth - iconSize) / 2,
+                    y = iconPosY.value
+                )
+                .background(iconBackgroundColor, iconBackgroundShape)
+                .height(iconSize)
+                .width(iconSize)
+                .rotate(
+                    degrees = if (refreshState.value) {
                         iconRotate.value
                     } else {
                         abs(iconPosY.value / threshold.dp) * 720f
 
-                    }),
-                tint = Color.Cyan
+                    }
+                ),
+            tint = iconColor
+        )
 
-            )
-//            Spacer(
-//                modifier = Modifier
-//                    .offset(
-//                        x = (maxWidth - 50.dp) / 2,
-//                        y = iconPosY.value
-//                    )
-//                    .background(color = Color.Red, shape = CircleShape)
-//                    .height(50.dp)
-//                    .width(50.dp)
-//
-//
-//            )
-        }
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 10.dp
-            )
-
-        ) {
-            items(100) { index ->
-                Text("I'm item $index")
-            }
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun DefaultPreview() {
-    Nested_ScrollTheme {
-        Greeting("Android")
+        content()
     }
 }
