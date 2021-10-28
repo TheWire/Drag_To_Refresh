@@ -31,8 +31,12 @@ fun refreshAction(
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
 //                Log.d("SCROLL", "pre scroll ${available.y}")
-                //when scrolling is happening
-                iconState.value = true
+
+                //when continuing to scroll upwards at top
+                //set icon to be draggable
+                if(available.y > 0 && iOffset.value > 0) {
+                    iconState.value = true
+                }
                 return Offset.Zero
             }
 
