@@ -1,5 +1,6 @@
 package com.thewire.nested_scroll.ui.components
 
+import android.util.Log
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -17,29 +18,41 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import kotlin.math.abs
 
 @Composable
 fun RefreshContainer(
     modifier: Modifier = Modifier,
-    refreshState: MutableState<Boolean>,
     iconImage: ImageVector = Icons.Filled.Refresh,
     iconBackgroundShape: Shape = CircleShape,
     iconColor: Color = Color.Cyan,
     iconBackgroundColor: Color = Color.DarkGray,
-    threshold: Float = 150f,
+    threshold: Dp = 150.dp,
     iconSize: Dp = 25.dp,
     initialIconPosY: Dp = -iconSize,
     iconLoadPos: Dp = 15.dp,
-    refreshCallback: (MutableState<Boolean>) -> Unit,
+    iconZIndex: Float = 1f,
+    refreshCallback: (() -> Unit) -> Unit,
     content: @Composable BoxWithConstraintsScope.() -> Unit
 ) {
+
+    //is refreshing currently happening
+    val refreshState = remember {
+        mutableStateOf(false)
+    }
 
     //icon position set by scrolling
     val iconPos = remember {
         mutableStateOf(initialIconPosY)
+    }
+
+    //state of icon being dragged
+    val iconState = remember {
+        mutableStateOf(false)
     }
 
 
@@ -49,18 +62,21 @@ fun RefreshContainer(
             durationMillis = 250,
             easing = LinearEasing
         ),
-        //if there is no fresh i.e. threshold not met then
-        //set icon position to scroll position
-        targetValue = if(!refreshState.value) {
-            iconPos.value
-        } else { //if threshold met set icon to loading pos
-            iconLoadPos
-        },
-        finishedListener = {
-            //after refresh
-            //when done animating loading pos send icon back to its initial position
-            if(refreshState.value) {
-                iconPos.value = initialIconPosY
+        targetValue = when {
+            //when icon is being dragged
+            iconState.value -> {
+//                Log.d("SCROLL", "iconpos")
+                iconPos.value
+            }
+            //when threshold is met
+            refreshState.value -> {
+//                Log.d("SCROLL", "iconloadpos")
+                iconLoadPos
+            }
+            //when released either by drag or completed refreshing
+            else -> {
+//                Log.d("SCROLL", "initial")
+                initialIconPosY
             }
         }
     )
@@ -84,10 +100,21 @@ fun RefreshContainer(
         modifier = modifier
             .nestedScroll(
                 refreshAction(
-                    threshold = threshold,
+                    threshold = with(LocalDensity.current) { threshold.toPx() },
                     iconPos = iconPos,
-                    refreshState = refreshState,
-                    refreshCallback = refreshCallback,
+                    iconState = iconState,
+                    refreshCallback = { callback ->
+                        //set local refresh state to true
+                        refreshState.value = true
+                        //then call higher callback
+                        //when that callback is completed set local
+                        //refresh state to false
+                        refreshCallback {
+                            refreshState.value = false
+                        }
+
+                        callback()
+                    },
                 )
             )
     ) {
@@ -103,12 +130,13 @@ fun RefreshContainer(
                 .background(iconBackgroundColor, iconBackgroundShape)
                 .height(iconSize)
                 .width(iconSize)
+                .zIndex(iconZIndex)
                 .rotate(
                     //if refreshing set loading rotation animation
                     degrees = if (refreshState.value) {
                         iconRotate.value
                     } else { //if not refreshing position is based on scrolling
-                        abs(iconPosY.value / threshold.dp) * 720f
+                        abs(iconPosY.value / threshold) * 720f
 
                     }
                 ),

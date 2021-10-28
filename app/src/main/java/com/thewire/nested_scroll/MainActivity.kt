@@ -54,11 +54,13 @@ class MainActivity : ComponentActivity() {
 }
 
 //simulated refresh/reload
-fun doSimulatedRefresh(refreshState: MutableState<Boolean>) {
+fun doSimulatedRefresh(refreshState: MutableState<Boolean>, callback: () -> Unit) {
     CoroutineScope(Dispatchers.Main).launch {
         refreshState.value = true
         delay(2000)
         refreshState.value = false
+        //callback when done refreshing so drag to refresh now to reset
+        callback()
     }
 }
 
@@ -82,14 +84,14 @@ fun ListWithRefresh() {
 
         RefreshContainer(
             modifier = Modifier.fillMaxSize(),
-            refreshState = refreshState,
-            refreshCallback = ::doSimulatedRefresh
+            refreshCallback = { callback ->
+                doSimulatedRefresh(refreshState, callback)
+            }
         ) {
             //example list
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 10.dp
-                )
+                contentPadding = PaddingValues(top = 10.dp)
             ) {
                 items(100) { index ->
                     Text("I'm item $index")

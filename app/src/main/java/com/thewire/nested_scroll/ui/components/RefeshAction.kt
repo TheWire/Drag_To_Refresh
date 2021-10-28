@@ -1,5 +1,6 @@
 package com.thewire.nested_scroll.ui.components
 
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
@@ -17,21 +18,22 @@ import androidx.compose.ui.unit.dp
 fun refreshAction(
     threshold: Float,
     iconPos: MutableState<Dp>,
-    refreshState: MutableState<Boolean>,
-    refreshCallback: (MutableState<Boolean>) -> Unit,
+    iconState: MutableState<Boolean>,
+    refreshCallback: (() -> Unit) -> Unit,
 ) : NestedScrollConnection {
+
+    val refreshState = remember {
+        mutableStateOf(false)
+    }
 
     val iOffset = remember { mutableStateOf(0f) }
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
 //                Log.d("SCROLL", "pre scroll ${available.y}")
+                //when scrolling is happening
+                iconState.value = true
                 return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-//                Log.d("SCROLL", "pre fling ${available.y}")
-                return super.onPreFling(available)
             }
 
             override fun onPostScroll(
@@ -43,7 +45,6 @@ fun refreshAction(
                 //if scrolling up and there is unconsumed scroll available i.e. we are scroll as
                 //much as possible
                 if (available.y > 0) {
-
                     iOffset.value += available.y
                     //prevent icon moving bellow threshold point
                     if (iOffset.value < threshold) {
@@ -55,6 +56,11 @@ fun refreshAction(
                 return super.onPostScroll(consumed, available, source)
             }
 
+            override suspend fun onPreFling(available: Velocity): Velocity {
+//                Log.d("SCROLL", "pre fling ${available.y}")
+                return super.onPreFling(available)
+            }
+
             //refresh only happens on fling i.e. when scroll is released
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
 //                Log.d("SCROLL", "post fling consumed: ${consumed.y} available: ${available.y}")
@@ -62,8 +68,12 @@ fun refreshAction(
                 //if scrolling threshold met do refresh
                 if(iOffset.value >= threshold) {
                     refreshState.value = true
-                    refreshCallback(refreshState)
+                    refreshCallback {
+                        refreshState.value = false
+                    }
                 }
+                //scrolling of icon finished
+                iconState.value = false
                 //reset offset whether threshold was met or not
                 iOffset.value = 0f
                 return super.onPostFling(consumed, available)
